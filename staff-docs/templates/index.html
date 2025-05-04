@@ -1,0 +1,35 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Staff Documents</title>
+</head>
+<body>
+    <h1>Upload Staff Document</h1>
+    <form method="POST" enctype="multipart/form-data">
+        Name: <input type="text" name="staff_name"><br>
+        Type: <select name="doc_type">
+            <option>First Aid</option>
+            <option>Police Check</option>
+            <option>Driving Licence</option>
+        </select><br>
+        Expiry Date: <input type="date" name="expiry_date"><br>
+        File: <input type="file" name="file"><br>
+        <input type="submit" value="Upload">
+    </form>
+
+    <h2>Expiring Soon</h2>
+    <ul>
+        {% for doc in expiring %}
+            <li>{{ doc.staff_name }} - {{ doc.doc_type }} - {{ doc.expiry_date }}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>All Documents</h2>
+    <ul>
+        {% for doc in documents %}
+            <li>{{ doc.staff_name }} - {{ doc.doc_type }} - {{ doc.expiry_date }} - <a href="{{ doc.file_path }}">View</a></li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

@@ -1,40 +1,64 @@
 
 from flask import Flask, render_template, request, redirect, url_for
+from werkzeug.utils import secure_filename
 import os
+import sqlite3
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-UPLOAD_FOLDER = 'uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
 
-documents = []
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
 
-@app.route('/', methods=['GET', 'POST'])
+# Initialize DB
+def init_db():
+    with sqlite3.connect("documents.db") as conn:
+        conn.execute('''CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            staff_name TEXT,
+            doc_type TEXT,
+            filename TEXT,
+            expiry_date DATE
+        )''')
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    if request.method == 'POST':
-        staff_name = request.form['staff_name']
-        doc_type = request.form['doc_type']
-        expiry_date = request.form['expiry_date']
-        file = request.files['file']
-        
-        folder = os.path.join(app.config['UPLOAD_FOLDER'], doc_type)
-        os.makedirs(folder, exist_ok=True)
+    conn = sqlite3.connect("documents.db")
+    cur = conn.cursor()
 
-        file_path = os.path.join(folder, file.filename)
-        file.save(file_path)
+    # Handle file upload
+    if request.method == "POST":
+        staff_name = request.form["staff_name"]
+        doc_type = request.form["doc_type"]
+        expiry_date = request.form["expiry_date"]
+        file = request.files["file"]
 
-        documents.append({
-            'staff_name': staff_name,
-            'doc_type': doc_type,
-            'file_path': file_path,
-            'expiry_date': expiry_date
-        })
-        return redirect(url_for('index'))
+        if file:
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
 
-    today = datetime.today()
-    expiring = [doc for doc in documents if datetime.strptime(doc['expiry_date'], '%Y-%m-%d') - today < timedelta(days=60)]
+            cur.execute("INSERT INTO documents (staff_name, doc_type, filename, expiry_date) VALUES (?, ?, ?, ?)",
+                        (staff_name, doc_type, filename, expiry_date))
+            conn.commit()
+            return redirect(url_for("index"))
 
-    return render_template('index.html', documents=documents, expiring=expiring)
+    # Handle search
+    search = request.args.get("search", "")
+    query = "SELECT * FROM documents WHERE staff_name LIKE ? OR doc_type LIKE ?"
+    cur.execute(query, (f"%{search}%", f"%{search}%"))
+    documents = cur.fetchall()
 
-if __name__ == '__main__':
-    app.run(debug=True)
+    # Filter expiring soon
+    today = datetime.today().date()
+    soon = today + timedelta(days=60)
+    cur.execute("SELECT * FROM documents WHERE expiry_date <= ?", (soon,))
+    expiring = cur.fetchall()
+
+    conn.close()
+    return render_template("index.html", documents=documents, expiring=expiring, search=search)
+
+if __name__ == "__main__":
+    init_db()
+    app.run(host="0.0.0.0", port=5000, debug=True)
